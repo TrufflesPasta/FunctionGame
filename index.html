@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>函數畫圖闖關遊戲</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f4f8;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            transition: 0.2s;
+        }
+        .btn-google { background-color: #4285F4; color: white; }
+        .btn-guest { background-color: #34A853; color: white; }
+        .btn-logout { background-color: #EA4335; color: white; }
+        button:hover { opacity: 0.9; }
+        .hidden { display: none; }
+        #user-info { margin-top: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>方塊函數挑戰賽 📈</h1>
+    <p>請選擇登入方式開始遊戲</p>
+
+    <!-- 登入前介面 -->
+    <div id="login-section">
+        <button class="btn-google" id="btn-google">使用 Google 登入</button>
+        <button class="btn-guest" id="btn-guest">以 訪客身分 試玩</button>
+    </div>
+
+    <!-- 暱稱輸入介面 (檢查唯一性用) -->
+    <div id="username-section" class="hidden">
+        <h2>建立你的遊戲暱稱</h2>
+        <p>請輸入一個不重複的使用者名稱：</p>
+        <input type="text" id="username-input" placeholder="請輸入暱稱..." style="padding: 10px; font-size: 16px; width: 80%;">
+        <br>
+        <button class="btn-guest" id="btn-submit-username">確定進入遊戲</button>
+    </div>
+
+    <!-- 遊戲主畫面 (暫時先放登出按鈕測試) -->
+    <div id="game-section" class="hidden">
+        <h2>遊戲大廳</h2>
+        <div id="user-display"></div>
+        <hr>
+        <p>（這裡之後會放自動生成的函數圖形與輸入框！）</p>
+        <hr>
+        <button class="btn-logout" id="btn-logout">登出 / 離開遊戲</button>
+    </div>
+</div>
+
+<!-- 載入 Firebase SDK (使用 v10+ 模組化版本) -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // 填入你的 Firebase 專案設定資訊 (下一步拿到後再貼過來替換)
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+
+    // 初始化 Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // 暫存目前的玩家狀態
+    let currentUsername = null;
+    let isAnonymousUser = false;
+
+    // DOM 元素
+    const loginSection = document.getElementById('login-section');
+    const usernameSection = document.getElementById('username-section');
+    const gameSection = document.getElementById('game-section');
+    const userDisplay = document.getElementById('user-display');
+
+    // 監聽登入狀態改變
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            isAnonymousUser = user.isAnonymous;
+            console.log("用戶已登入，UID:", user.uid, "是否為訪客:", isAnonymousUser);
+            
+            // 這裡後面會補上「檢查資料庫看有沒有暱稱」的邏輯
+            // 目前先暫時切換到暱稱輸入畫面
+            loginSection.classList.add('hidden');
+            usernameSection.classList.remove('hidden');
+        } else {
+            // 未登入，顯示登入按鈕
+            loginSection.classList.remove('hidden');
+            usernameSection.classList.add('hidden');
+            gameSection.classList.add('hidden');
+        }
+    });
+
+    // 點擊 Google 登入
+    document.getElementById('btn-google').addEventListener('click', () => {
+        const provider = new GoogleAuthProvider();
+        signInWithPopup(auth, provider).catch(err => console.error("Google 登入失敗", err));
+    });
+
+    // 點擊 訪客 登入
+    document.getElementById('btn-guest').addEventListener('click', () => {
+        signInAnonymously(auth).catch(err => console.error("訪客登入失敗", err));
+    });
+
+    // 點擊 登出/離開
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+        await signOut(auth);
+        location.reload();
+    });
+
+</script>
+</body>
+</html>
