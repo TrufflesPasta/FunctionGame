@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>函數畫圖闖關遊戲</title>
-    <script src="https://unpkg.com/d3@7"></script>
-    <script src="https://unpkg.com/function-plot@1"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/function-plot@1.24.0/dist/function-plot.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
     
     <style>
@@ -280,13 +280,16 @@
     }
 
     function drawGraph() {
+        // 先清空舊的畫布內容，避免重疊錯誤
+        document.getElementById('my-plot').innerHTML = "";
+
         const dataArr = [{
             fn: targetFormula,
             color: '#4285F4', // 目標線：藍色
             strokeWidth: 3
         }];
 
-        // 如果玩家有輸入，加畫玩家的線
+        // 如果玩家有輸入答案，加畫玩家的紅色線
         if (playerFormula) {
             dataArr.push({
                 fn: playerFormula,
@@ -296,17 +299,18 @@
         }
 
         try {
-            functionPlot({
+            // 呼叫新版相容語法
+            window.functionPlot({
                 target: '#my-plot',
                 width: 550,
                 height: 400,
                 grid: true,
-                yAxis: { domain: [-10, 10] },
                 xAxis: { domain: [-10, 10] },
+                yAxis: { domain: [-10, 10] },
                 data: dataArr
             });
         } catch (err) {
-            console.error("繪圖失敗", err);
+            console.error("繪圖失敗，錯誤訊息：", err);
         }
     }
 
