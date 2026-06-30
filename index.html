@@ -241,7 +241,11 @@
         userDisplay.innerHTML = `目前玩家：<strong>${currentUsername}</strong> (${isAnonymousUser ? '訪客模式（離開不留紀錄）' : 'Google帳號'})`;
         
         currentLevel = 1;
-        initLevel(currentLevel);
+        
+        // 關鍵修正：延遲 100 毫秒執行，確保網頁的 game-section 已經完全移除 hidden 顯示在畫面上後再畫圖
+        setTimeout(() => {
+            initLevel(currentLevel);
+        }, 100);
     }
 
     function initLevel(level) {
@@ -366,6 +370,10 @@
     document.getElementById('btn-next-level').addEventListener('click', () => {
         currentLevel++;
         initLevel(currentLevel);
+
+        setTimeout(() => {
+            initLevel(currentLevel);
+        }, 100);
     });
 
 </script>
