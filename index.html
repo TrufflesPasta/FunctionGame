@@ -315,60 +315,43 @@
     }
 
     // 評分演算法
+    // 評分演算法 (方案 A：平均絕對誤差 MAE 版本)
     function calculateScore(playerInput) {
         try {
             // 用 math.js 解析並編譯兩個函數
             const targetCompiled = math.compile(targetFormula);
             const playerCompiled = math.compile(playerInput);
             
-            let totalError = 0;
+            let totalDistance = 0;
             let samplePoints = 20;
+            let validPoints = 0;
 
-            // 在 x 從 -10 到 10 之間採樣 20 個點計算均方誤差
+            // 在 x 從 -10 到 10 之間採樣 20 個點
             for (let i = -10; i <= 10; i += 20 / samplePoints) {
                 let targetY = targetCompiled.evaluate({ x: i });
                 let playerY = playerCompiled.evaluate({ x: i });
                 
-                if (isNaN(targetY) || isNaN(playerY)) continue;
-                totalError += Math.pow(targetY - playerY, 2);
+                // 如果算出來不是數字（例如除以0或超出定義域），就跳過該點
+                if (isNaN(targetY) || isNaN(playerY) || !isFinite(targetY) || !isFinite(playerY)) continue;
+                
+                // 計算垂直絕對距離（MAE）
+                totalDistance += Math.abs(targetY - playerY);
+                validPoints++;
             }
 
-            let mse = totalError / samplePoints;
-            // 轉換為 0-100 分 (mse 越小，分數越高)
-            let score = Math.max(0, Math.round(100 - mse * 3));
+            if (validPoints === 0) return 0;
+
+            // 計算平均距離
+            let averageDistance = totalDistance / validPoints;
+            
+            // 算分公式：基準 100 分，平均每差 1 個單位扣 10 分 (你可以隨時調整這個 10)
+            let score = Math.max(0, Math.round(100 - averageDistance * 10));
+            
             return score;
         } catch (e) {
             return -1; // 玩家公式語法錯誤
         }
     }
-
-    // 提交答案點擊事件
-    document.getElementById('btn-submit-answer').addEventListener('click', () => {
-        const input = document.getElementById('player-input').value.trim();
-        if (!input) {
-            alert("請輸入函數公式！");
-            return;
-        }
-
-        const score = calculateScore(input);
-
-        if (score === -1) {
-            alert("函數格式輸入錯誤！請確認語法（例如：2 * x + 1 或 x ^ 2）");
-            return;
-        }
-
-        playerFormula = input; 
-        drawGraph(); // 重新繪圖顯示兩條線對比
-
-        document.getElementById('score-display').innerText = `本關得分：${score} 分！`;
-        
-        if (score >= 80) {
-            document.getElementById('score-display').innerText += " 🎉 (達 80 分，解鎖下一關！)";
-            document.getElementById('btn-next-level').classList.remove('hidden');
-        } else {
-            document.getElementById('score-display').innerText += " ❌ (未滿 80 分，再調整看看！)";
-        }
-    });
 
     // 下一關點擊事件
     document.getElementById('btn-next-level').addEventListener('click', () => {
