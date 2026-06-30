@@ -314,8 +314,7 @@
         }
     }
 
-    // 評分演算法
-    // 評分演算法 (方案 A：平均絕對誤差 MAE 版本)
+    // 評分演算法 (終極平滑反比例版本：再遠都有分，越近分數越高)
     function calculateScore(playerInput) {
         try {
             // 用 math.js 解析並編譯兩個函數
@@ -331,10 +330,10 @@
                 let targetY = targetCompiled.evaluate({ x: i });
                 let playerY = playerCompiled.evaluate({ x: i });
                 
-                // 如果算出來不是數字（例如除以0或超出定義域），就跳過該點
+                // 跳過無法計算的點（如除以0）
                 if (isNaN(targetY) || isNaN(playerY) || !isFinite(targetY) || !isFinite(playerY)) continue;
                 
-                // 計算垂直絕對距離（MAE）
+                // 計算垂直絕對距離
                 totalDistance += Math.abs(targetY - playerY);
                 validPoints++;
             }
@@ -344,8 +343,9 @@
             // 計算平均距離
             let averageDistance = totalDistance / validPoints;
             
-            // 算分公式：基準 100 分，平均每差 1 個單位扣 10 分 (你可以隨時調整這個 10)
-            let score = Math.max(0, Math.round(100 - averageDistance * 10));
+            // 💡 終極平滑公式：Score = 100 / (1 + 誤差 * 權重)
+            // 這裡乘上 0.4 是經過測試非常舒服的難度，誤差越小分數飆越快
+            let score = Math.round(100 / (1 + averageDistance * 0.4));
             
             return score;
         } catch (e) {
