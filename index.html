@@ -86,7 +86,7 @@
 
         <h3 id="score-display" style="color: #ea4335; min-height: 30px;"></h3>
         
-        <button id="btn-next-level" class="hidden" style="background-color: #f4b400; color: white;">下一關</button>
+        <button id="btn-next-level" style="display: none; background-color: #f4b400; color: white;">下一關</button>
         <hr>
         <button class="btn-logout" id="btn-logout">登出 / 離開遊戲</button>
     </div>
@@ -97,7 +97,7 @@
     import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    // 你的 Firebase 專案設定資訊
+    // 你的 Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyD8adS5yAGhkhUzdjG2WJrkjRutjRY8HzI",
       authDomain: "functiongame-3c32f.firebaseapp.com",
@@ -107,12 +107,10 @@
       appId: "1:325873073665:web:83e3ceb3c0d827fe834a00"
     };
 
-    // 初始化 Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // 遊戲與帳號狀態變數
     let currentUserUid = null;
     let currentUsername = null;
     let isAnonymousUser = false;
@@ -120,28 +118,47 @@
     let targetFormula = ""; 
     let playerFormula = ""; 
 
-    // DOM 元素
     const loginSection = document.getElementById('login-section');
     const usernameSection = document.getElementById('username-section');
     const gameSection = document.getElementById('game-section');
     const userDisplay = document.getElementById('user-display');
     const usernameInput = document.getElementById('username-input');
 
-    // ------------------------------------------
-    // 帳號登入與狀態監聽
-    // ------------------------------------------
+    // 監聽登入（含自動清理未正常登出訪客的機制）
     onAuthStateChanged(auth, async (user) => {
+        // 🛡️ 檢查上一次有沒有沒點登出就直接關網頁或重開的訪客殘留進度
+        const savedGuestUid = sessionStorage.getItem('pending_clean_guest_uid');
+        const savedGuestName = sessionStorage.getItem('pending_clean_guest_name');
+        
+        if (savedGuestUid && savedGuestName) {
+            console.log("發現未正常登出的訪客殘留資料，啟動自動背景清理...");
+            try {
+                await deleteDoc(doc(db, "usernames", savedGuestName));
+                await deleteDoc(doc(db, "users", savedGuestUid));
+                sessionStorage.removeItem('pending_clean_guest_uid');
+                sessionStorage.removeItem('pending_clean_guest_name');
+                console.log("殘留垃圾清理完畢！");
+            } catch (e) {
+                console.error("自動清理殘留失敗:", e);
+            }
+        }
+
         if (user) {
             currentUserUid = user.uid;
             isAnonymousUser = user.isAnonymous;
-            console.log("用戶已登入，UID:", user.uid, "是否為訪客:", isAnonymousUser);
             
-            // 檢查這個 UID 以前有沒有建立過進度與暱稱
             const userDocRef = doc(db, "users", user.uid);
             const userDocSnap = await getDoc(userDocRef);
 
             if (userDocSnap.exists()) {
                 currentUsername = userDocSnap.data().username;
+                
+                // 💡 如果是正常登入的訪客，成功進入大廳後立刻在瀏覽器埋下殘留憑證
+                if (isAnonymousUser) {
+                    sessionStorage.setItem('pending_clean_guest_uid', currentUserUid);
+                    sessionStorage.setItem('pending_clean_guest_name', currentUsername);
+                }
+                
                 enterGameLobby();
             } else {
                 loginSection.classList.add('hidden');
@@ -152,43 +169,31 @@
             currentUserUid = null;
             currentUsername = null;
             isAnonymousUser = false;
-            
             loginSection.classList.remove('hidden');
             usernameSection.classList.add('hidden');
             gameSection.classList.add('hidden');
         }
     });
 
-    // 點擊 Google 登入
     document.getElementById('btn-google').addEventListener('click', () => {
         const provider = new GoogleAuthProvider();
-        signInWithPopup(auth, provider).catch(err => console.error("Google 登入失敗", err));
+        signInWithPopup(auth, provider).catch(err => console.error(err));
     });
 
-    // 點擊 訪客 登入
     document.getElementById('btn-guest').addEventListener('click', () => {
-        signInAnonymously(auth).catch(err => console.error("訪客登入失敗", err));
+        signInAnonymously(auth).catch(err => console.error(err));
     });
 
-    // 提交暱稱 (檢查不重複)
     document.getElementById('btn-submit-username').addEventListener('click', async () => {
         const inputName = usernameInput.value.trim();
-        
-        if (!inputName) {
-            alert("請輸入暱稱！");
-            return;
-        }
+        if (!inputName) { alert("請輸入暱稱！"); return; }
 
         const nameRef = doc(db, "usernames", inputName);
         const nameSnap = await getDoc(nameRef);
 
-        if (nameSnap.exists()) {
-            alert("這個名稱已經有人使用了，請換一個！");
-            return; 
-        }
+        if (nameSnap.exists()) { alert("這個名稱已經有人使用了，請換一個！"); return; }
 
         try {
-            // 鎖定暱稱並建立帳號資料
             await setDoc(nameRef, { uid: currentUserUid, isAnonymous: isAnonymousUser });
             await setDoc(doc(db, "users", currentUserUid), {
                 username: inputName,
@@ -196,22 +201,32 @@
                 createdAt: new Date()
             });
 
+            // 💡 建立完暱稱成功，立刻記錄憑證預防他等一下直接叉掉網頁
+            if (isAnonymousUser) {
+                sessionStorage.setItem('pending_clean_guest_uid', currentUserUid);
+                sessionStorage.setItem('pending_clean_guest_name', inputName);
+            }
+
             currentUsername = inputName;
             enterGameLobby();
         } catch (error) {
-            console.error("建立名稱時發生錯誤:", error);
             alert("設定失敗，請重試。");
         }
     });
 
-    // 登出/離開遊戲 (訪客會在此時被同步刪除紀錄)
+    // 手動點擊登出/離開遊戲 (立刻清除資料與暫存憑證)
     document.getElementById('btn-logout').addEventListener('click', async () => {
-        await cleanGuestDataIfNeeded();
+        if (isAnonymousUser && currentUsername) {
+            await deleteDoc(doc(db, "usernames", currentUsername));
+            await deleteDoc(doc(db, "users", currentUserUid));
+            sessionStorage.removeItem('pending_clean_guest_uid');
+            sessionStorage.removeItem('pending_clean_guest_name');
+        }
         await signOut(auth);
         location.reload();
     });
 
-    // 防呆：訪客直接「關閉視窗」或「重新整理」的清除機制
+    // 瀏覽器快關閉時的最後防線
     window.addEventListener('beforeunload', () => {
         if (isAnonymousUser && currentUsername) {
             deleteDoc(doc(db, "usernames", currentUsername));
@@ -219,33 +234,14 @@
         }
     });
 
-    async function cleanGuestDataIfNeeded() {
-        if (isAnonymousUser && currentUsername) {
-            try {
-                await deleteDoc(doc(db, "usernames", currentUsername));
-                await deleteDoc(doc(db, "users", currentUserUid));
-                console.log("訪客資料已成功清除");
-            } catch (e) {
-                console.error("清除訪客資料失敗", e);
-            }
-        }
-    }
-
-    // ------------------------------------------
-    // 遊戲關卡與圖形生成核心邏輯
-    // ------------------------------------------
     function enterGameLobby() {
         loginSection.classList.add('hidden');
         usernameSection.classList.add('hidden');
         gameSection.classList.remove('hidden');
-        userDisplay.innerHTML = `目前玩家：<strong>${currentUsername}</strong> (${isAnonymousUser ? '訪客模式（離開不留紀錄）' : 'Google帳號'})`;
+        userDisplay.innerHTML = `目前玩家：<strong>${currentUsername}</strong> (${isAnonymousUser ? '訪客模式（離開或關網頁自動清除）' : 'Google帳號'})`;
         
         currentLevel = 1;
-        
-        // 關鍵修正：延遲 100 毫秒執行，確保網頁的 game-section 已經完全移除 hidden 顯示在畫面上後再畫圖
-        setTimeout(() => {
-            initLevel(currentLevel);
-        }, 100);
+        setTimeout(() => { initLevel(currentLevel); }, 150);
     }
 
     function initLevel(level) {
@@ -253,13 +249,12 @@
         playerFormula = "";
         document.getElementById('player-input').value = "";
         document.getElementById('score-display').innerText = "";
-        document.getElementById('btn-next-level').classList.add('hidden');
+        document.getElementById('btn-next-level').style.display = "none";
         
         generateTargetFunction(level);
         drawGraph();
     }
 
-    // 隨機產生 -4 到 4 之間的常數 (排除 0)
     function randCoeff() {
         let r = Math.floor(Math.random() * 9) - 4;
         return r === 0 ? 1 : r;
@@ -267,39 +262,34 @@
 
     function generateTargetFunction(level) {
         if (level === 1) {
-            // 第一關：直線方程式 y = ax + b
             targetFormula = `${randCoeff()} * x + (${randCoeff()})`;
         } else if (level === 2) {
-            // 第二關：二次拋物線 y = ax^2 + c
             targetFormula = `${randCoeff()} * x^2 + (${randCoeff()})`;
         } else {
-            // 第三關以上：三角函數 y = a * sin(x) + c
             targetFormula = `${randCoeff()} * sin(x) + (${randCoeff()})`;
         }
-        console.log(`第 ${level} 關公式:`, targetFormula);
+        console.log("目標公式:", targetFormula);
     }
 
     function drawGraph() {
-        // 先清空舊的畫布內容
-        document.getElementById('my-plot').innerHTML = "";
+        const myPlotEl = document.getElementById('my-plot');
+        myPlotEl.innerHTML = ""; 
 
         const dataArr = [{
             fn: targetFormula,
-            color: '#4285F4', // 目標線：藍色
+            color: '#4285F4',
             strokeWidth: 3
         }];
 
-        // 如果玩家有輸入答案，加畫玩家的紅色線
         if (playerFormula) {
             dataArr.push({
                 fn: playerFormula,
-                color: '#EA4335', // 玩家線：紅色
+                color: '#EA4335',
                 strokeWidth: 2
             });
         }
 
         try {
-            // 🔴 移除 window. 改用標準呼叫
             functionPlot({
                 target: '#my-plot',
                 width: 550,
@@ -310,14 +300,13 @@
                 data: dataArr
             });
         } catch (err) {
-            console.error("繪圖失敗，錯誤訊息：", err);
+            console.error("繪圖失敗:", err);
         }
     }
 
-    // 評分演算法 (終極平滑反比例版本：再遠都有分，越近分數越高)
+    // 終極平滑反比例算分演算法（再遠都有分）
     function calculateScore(playerInput) {
         try {
-            // 用 math.js 解析並編譯兩個函數
             const targetCompiled = math.compile(targetFormula);
             const playerCompiled = math.compile(playerInput);
             
@@ -325,44 +314,65 @@
             let samplePoints = 20;
             let validPoints = 0;
 
-            // 在 x 從 -10 到 10 之間採樣 20 個點
             for (let i = -10; i <= 10; i += 20 / samplePoints) {
                 let targetY = targetCompiled.evaluate({ x: i });
                 let playerY = playerCompiled.evaluate({ x: i });
                 
-                // 跳過無法計算的點（如除以0）
                 if (isNaN(targetY) || isNaN(playerY) || !isFinite(targetY) || !isFinite(playerY)) continue;
                 
-                // 計算垂直絕對距離
                 totalDistance += Math.abs(targetY - playerY);
                 validPoints++;
             }
 
             if (validPoints === 0) return 0;
-
-            // 計算平均距離
             let averageDistance = totalDistance / validPoints;
             
-            // 💡 終極平滑公式：Score = 100 / (1 + 誤差 * 權重)
-            // 這裡乘上 0.4 是經過測試非常舒服的難度，誤差越小分數飆越快
-            let score = Math.round(100 / (1 + averageDistance * 0.4));
-            
+            // 💡 0.35 權重：貼合越好，分數衝越高，絕不輕易給 0 分
+            let score = Math.round(100 / (1 + averageDistance * 0.35));
             return score;
         } catch (e) {
-            return -1; // 玩家公式語法錯誤
+            return -1; 
         }
     }
 
-    // 下一關點擊事件
-    document.getElementById('btn-next-level').addEventListener('click', () => {
-        currentLevel++;
-        initLevel(currentLevel);
+    // 提交答案
+    document.getElementById('btn-submit-answer').addEventListener('click', () => {
+        const input = document.getElementById('player-input').value.trim();
+        if (!input) { alert("請輸入函數公式！"); return; }
 
-        setTimeout(() => {
-            initLevel(currentLevel);
-        }, 100);
+        const score = calculateScore(input);
+        if (score === -1) {
+            alert("函數格式輸入錯誤！請確認語法（例如：2 * x + 1 或 x ^ 2）");
+            return;
+        }
+
+        playerFormula = input; 
+        
+        try {
+            drawGraph(); 
+        } catch (e) {
+            console.log(e);
+        }
+
+        const scoreDisplay = document.getElementById('score-display');
+        const nextLevelBtn = document.getElementById('btn-next-level');
+
+        scoreDisplay.innerText = `本關得分：${score} 分！`;
+        
+        if (score >= 80) {
+            scoreDisplay.innerText += " 🎉 (達 80 分，解鎖下一關！)";
+            nextLevelBtn.style.display = "inline-block";
+        } else {
+            scoreDisplay.innerText += " ❌ (未滿 80 分，再調整看看！)";
+            nextLevelBtn.style.display = "none";
+        }
     });
 
+    // 下一關
+    document.getElementById('btn-next-level').addEventListener('click', () => {
+        currentLevel++;
+        setTimeout(() => { initLevel(currentLevel); }, 100);
+    });
 </script>
 </body>
 </html>
